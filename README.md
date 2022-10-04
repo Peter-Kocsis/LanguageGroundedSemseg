@@ -1,4 +1,4 @@
-## Language-Grounded Indoor 3D Semantic Segmentation in the Wil 
+## Language-Grounded Indoor 3D Semantic Segmentation in the Wild 
 ### Implementation for our ECCV 2022 paper
 
 <div align="center">
