@@ -70,8 +70,14 @@ class Front3DLightingGeometryDataset(VoxelizationDataset):
                  phase=DatasetPhase.Train):
         if isinstance(phase, str):
             phase = str2datasetphase_type(phase)
-        # Use cropped rooms for train/val
+
         data_root = config.scannet_path
+        # Use cropped rooms for train/val
+        if phase == DatasetPhase.Train:
+            data_root = os.path.join(data_root, "train")
+        else:
+            data_root = os.path.join(data_root, "test")
+
         if phase not in [DatasetPhase.Train, DatasetPhase.TrainVal]:
             self.CLIP_BOUND = self.TEST_CLIP_BOUND
         data_paths = [subfolder for subfolder in os.listdir(data_root) if os.path.isdir(os.path.join(data_root, subfolder))]
