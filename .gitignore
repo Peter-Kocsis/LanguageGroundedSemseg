@@ -7,3 +7,5 @@ wandb/
 notebooks/
 output/*.csv
 .DS_Store
+
+pretrained_models/

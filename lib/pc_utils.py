@@ -43,6 +43,9 @@ def save_point_cloud(points_3d, filename, binary=True, with_label=False, verbose
           the RGB values. If Nx3 matrix, save all points with [128, 128, 128] (gray) color.
     """
     assert points_3d.ndim == 2
+
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+
     if with_label:
         if points_3d.shape[1] == 7:
             python_types = (float, float, float, int, int, int, int)

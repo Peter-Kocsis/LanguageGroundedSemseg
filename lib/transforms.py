@@ -422,6 +422,47 @@ class cfl_collate_fn_factory:
         return coords_batch, feats_batch.float(), labels_batch, scene_names_batch
 
 
+class cft_collate_fn_factory:
+    """Generates collate function for coords, feats, labels.
+
+      Args:
+        limit_numpoints: If 0 or False, does not alter batch size. If positive integer, limits batch
+                         size so that the number of input coordinates is below limit_numpoints.
+    """
+
+    def __init__(self, limit_numpoints):
+        self.limit_numpoints = limit_numpoints
+
+    def __call__(self, list_data):
+        coords, feats, labels, scene_names = list(zip(*list_data))
+        coords_batch, feats_batch, labels_batch, scene_names_batch = [], [], [], []
+
+        batch_id = 0
+        batch_num_points = 0
+        for batch_id, _ in enumerate(coords):
+            num_points = coords[batch_id].shape[0]
+            batch_num_points += num_points
+            if self.limit_numpoints and batch_num_points > self.limit_numpoints:
+                num_full_points = sum(len(c) for c in coords)
+                num_full_batch_size = len(coords)
+                logging.warning(
+                    f'\t\tCannot fit {num_full_points} points into {self.limit_numpoints} points '
+                    f'limit. Truncating batch size at {batch_id} out of {num_full_batch_size} with {batch_num_points - num_points}.'
+                )
+                break
+            coords_batch.append(torch.from_numpy(coords[batch_id]).int())
+            feats_batch.append(torch.from_numpy(feats[batch_id]))
+            labels_batch.append(torch.from_numpy(labels[batch_id]))
+            scene_names_batch.append(scene_names[batch_id])
+
+            batch_id += 1
+
+        # Concatenate all lists
+        coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(coords_batch, feats_batch, labels_batch)
+        return coords_batch, feats_batch.float(), labels_batch, scene_names_batch
+
+
+
 class cflt_collate_fn_factory:
     """Generates collate function for coords, feats, labels, point_clouds, transformations.
 

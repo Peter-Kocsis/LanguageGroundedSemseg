@@ -2,6 +2,7 @@ import models.resunet as resunet
 import models.res16unet as res16unet
 import models.clip_models as clip_models
 import models.classifier_models as classifier_models
+from models import res16unet_intermediate
 
 # from models.trilateral_crf import TrilateralCRF
 from models.conditional_random_fields import BilateralCRF, TrilateralCRF
@@ -17,6 +18,7 @@ add_models(resunet)
 add_models(res16unet)
 add_models(clip_models)
 add_models(classifier_models)
+add_models(res16unet_intermediate)
 
 WRAPPERS = [BilateralCRF, TrilateralCRF]
 

@@ -114,6 +114,10 @@ def loss_by_name(loss_name, ignore_index=0, alpha=0.5, gamma=2.0, reduction='mea
         return FocalLoss(alpha, gamma, reduction=reduction, ignore_index=ignore_index)
     elif loss_name == 'cross_entropy':
         return nn.CrossEntropyLoss(weight=weight, ignore_index=ignore_index, reduction=reduction)
+    elif loss_name == 'binary_cross_entropy':
+        return nn.BCEWithLogitsLoss(weight=weight, reduction=reduction)
+    elif loss_name == 'mse':
+        return nn.MSELoss(reduction=reduction)
     else:
         return None
 
@@ -347,11 +351,12 @@ def visualize_results(coords, colors, target,
                       refinement_pred=None,
                       refinement_target=None,
                       allow_0=False,
-                      output_features=None):
+                      output_features=None,
+                      name_prefix=''):
     if train_iteration:
-        base_file_name = '_'.join([config.dataset, config.model, 'train_{}'.format(train_iteration)])
+        base_file_name = '_'.join([config.dataset, config.model, f'{name_prefix}train_{train_iteration}'])
     else:
-        base_file_name = '_'.join([config.dataset, config.model, 'test'])
+        base_file_name = '_'.join([config.dataset, config.model, f'{name_prefix}test{{}}'])
 
     # Create directory to save visualization results.
     os.makedirs(config.visualize_path, exist_ok=True)
@@ -603,8 +608,8 @@ def print_info(iteration,
 
     if class_names is not None:
         debug_str += "\nClasses: " + ", ".join(class_names) + '\n'
-    debug_str += 'IOU: ' + ', '.join('{:.03f}'.format(i) for i in ious) + '\n'
-    debug_str += 'mAP: ' + ', '.join('{:.03f}'.format(i) for i in ap_class) + '\n'
-    debug_str += 'mAcc: ' + ', '.join('{:.03f}'.format(i) for i in acc) + '\n'
+    # debug_str += 'IOU: ' + ', '.join('{:.03f}'.format(i) for i in ious) + '\n'
+    # debug_str += 'mAP: ' + ', '.join('{:.03f}'.format(i) for i in ap_class) + '\n'
+    # debug_str += 'mAcc: ' + ', '.join('{:.03f}'.format(i) for i in acc) + '\n'
 
     logging.info(debug_str)

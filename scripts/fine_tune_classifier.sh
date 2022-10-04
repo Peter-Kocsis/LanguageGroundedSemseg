@@ -10,10 +10,10 @@ export POSTFIX=$5
 
 export DATASET=Scannet200Textual2cmDataset  # Scannet200Voxelization2cmDataset
 
-# export DATA_ROOT="/mnt/Data/ScanNet/scannet_200"
-# export LIMITED_DATA_ROOT="/mnt/Data/ScanNet/limited/"$DATASET_FOLDER
-# export OUTPUT_DIR_ROOT="/mnt/Data/output"
-# export PRETRAINED_WEIGHTS="/mnt/Data/weights/CLIP/Res16UNet34D.ckpt"
+export DATA_ROOT="/mnt/hdd/datasets/ScanNet/scannet_200"
+export LIMITED_DATA_ROOT="/mnt/hdd/datasets/ScanNet/limited/"$DATASET_FOLDER
+export OUTPUT_DIR_ROOT="/mnt/hdd/tmp/geom_prior/output"
+export PRETRAINED_WEIGHTS="/mnt/hdd/tmp/geom_prior/weights/Res16UNet34D.ckpt"
 
 export TIME=$(date +"%Y-%m-%d_%H-%M-%S")
 
@@ -41,9 +41,6 @@ python -m lightning_main \
     --loss_type $LOSS_TYPE \
     --classifier_only True \
     --resume $LOG_DIR \
+    --weights $PRETRAINED_WEIGHTS
     $ARGS \
-     2>&1 | tee -a "$LOG"
-
-#    --resume $LOG_DIR \
-#    --classifier_only True \
-#    --weights $PRETRAINED_WEIGHTS \
+     2>&1 | tee -a "$LOG" \

@@ -25,7 +25,7 @@ from torchmetrics import JaccardIndex  # IoU
 from torchmetrics import AveragePrecision  # mAP
 from torchmetrics import Recall  # we call it accuracy instead
 from lib.losses.utils import MetricAverageMeter as AverageMeter
-
+import lib.transforms as t
 
 class BaselineTrainerModule(LightningModule):
 
@@ -35,7 +35,7 @@ class BaselineTrainerModule(LightningModule):
             if name != "self":
                 setattr(self, name, value)
 
-        pl.seed_everything(config.seed)
+        pl.seed_everything(config.seed, workers=True)
 
         self.config = config
         self.model = model  # type: nn.Module
@@ -85,9 +85,11 @@ class BaselineTrainerModule(LightningModule):
             shuffle=True,
             repeat=False,
             batch_size=self.config.batch_size,
-            limit_numpoints=self.config.train_limit_numpoints)
+            limit_numpoints=self.config.train_limit_numpoints,
+            collate_function=t.cft_collate_fn_factory)
 
-        return train_data_loader
+        return self.val_dataloader()
+        # return train_data_loader
 
     def init_criterions(self):
 
@@ -121,7 +123,8 @@ class BaselineTrainerModule(LightningModule):
             shuffle=False,
             repeat=False,
             batch_size=self.config.val_batch_size,
-            limit_numpoints=False)
+            limit_numpoints=self.config.train_limit_numpoints,
+            collate_function=t.cft_collate_fn_factory)
 
         self.dataset = val_data_loader.dataset
         self.init_criterions()
@@ -155,7 +158,7 @@ class BaselineTrainerModule(LightningModule):
         self.reset_accumulators()
 
     def training_step(self, batch, batch_idx):
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         model_output = self.model_step(batch, batch_idx, mode='training')
         return self.eval_step(model_output)
 
@@ -164,10 +167,27 @@ class BaselineTrainerModule(LightningModule):
         if isinstance(self.embedding_criterion, PointSupConLoss):
             self.embedding_criterion.update_confusion_hist(self.iou_scores.confmat.long())
 
+        if self.config.visualize_freq == 0 or self.global_step % self.config.visualize_freq == 0 and self.global_step > 0:
+
+            if self.config.visualize:
+                class_ids = np.arange(self.num_labels)
+
+                label_mapper = lambda t: self.dataset.inverse_label_map[t]
+                target = outputs['final_target'].cpu().apply_(label_mapper)
+                pred = outputs['final_pred'].cpu().apply_(label_mapper)
+                invalid_parents = target == self.config.ignore_label
+                pred[invalid_parents] = self.config.ignore_label
+
+                visualize_results(coords=outputs['coords'], colors=outputs['colors'], target=target,
+                                  prediction=pred, config=self.config, iteration=self.global_step,
+                                  num_labels=self.num_labels, train_iteration=self.global_step,
+                                  valid_labels=class_ids, save_npy=True,
+                                  scene_name=outputs['scene_name'])
+
         return outputs
 
     def validation_step(self, batch, batch_idx):
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         model_output = self.model_step(batch, batch_idx, mode='validation')
         return self.eval_step(model_output)
 
@@ -188,7 +208,8 @@ class BaselineTrainerModule(LightningModule):
                                   prediction=pred, config=self.config, iteration=self.val_iteration,
                                   num_labels=self.num_labels, train_iteration=self.global_step,
                                   valid_labels=class_ids, save_npy=True,
-                                  scene_name=outputs['scene_name'])
+                                  scene_name=outputs['scene_name'],
+                                  name_prefix='val_')
 
         if self.val_iteration % self.config.test_stat_freq == 0 and self.val_iteration > 0:
             ious = self.iou_scores.compute()
@@ -248,7 +269,7 @@ class BaselineTrainerModule(LightningModule):
         self.accuracy.reset(), self.head_accuracy.reset(), self.common_accuracy.reset(), self.tail_accuracy.reset()
         self.aps = torch.zeros((0, self.num_labels))
 
-        self.val_iteration = 0
+        # self.val_iteration = 0
 
         self.category_features = {}
         self.target_epoch_freqs = {}
@@ -263,10 +284,11 @@ class BaselineTrainerModule(LightningModule):
         self.log(f'{phase}/loss', self.losses.compute())
         self.log(f'{phase}/precision_at_1', self.scores.compute() * 100.)
         self.log(f'{phase}/accuracy', self.accuracy.compute() * 100.)
-        self.log(f'{phase}/mIoU', nanmean_t(ious))
-        self.log(f'{phase}/head_mIoU', nanmean_t(ious[self.dataset.head_ids]))
-        self.log(f'{phase}/common_mIoU', nanmean_t(ious[self.dataset.common_ids]))
-        self.log(f'{phase}/tail_mIoU', nanmean_t(ious[self.dataset.tail_ids]))
+        if ious.ndim > 0:
+            self.log(f'{phase}/mIoU', nanmean_t(ious))
+            self.log(f'{phase}/head_mIoU', nanmean_t(ious[self.dataset.head_ids]))
+            # self.log(f'{phase}/common_mIoU', nanmean_t(ious[self.dataset.common_ids]))
+            # self.log(f'{phase}/tail_mIoU', nanmean_t(ious[self.dataset.tail_ids]))
 
         if self.head_losses.total > 0:
             self.log(f'{phase}/head_loss', self.head_losses.compute())
@@ -289,9 +311,9 @@ class BaselineTrainerModule(LightningModule):
 
         coords, input, target, scene_name, *transform = batch
 
-        # For some networks, making the network invariant to even, odd coords is important. Random translation
-        if mode == 'training':
-            coords[:, 1:] += (torch.rand(3) * 100).type_as(coords)
+        # # For some networks, making the network invariant to even, odd coords is important. Random translation
+        # if mode == 'training':
+        #     coords[:, 1:] += (torch.rand(3) * 100).type_as(coords)
 
         # Preprocess input
         color = input[:, :3].int()
@@ -358,20 +380,22 @@ class BaselineTrainerModule(LightningModule):
             self.tail_losses(nanmean_t(split_losses[2]), split_losses[2].size(0))
 
         # Evaluate prediction
-        if split_items is not None:
-            valid_pred = pred[target != self.config.ignore_label]
-            valid_target = target[target != self.config.ignore_label]
-            if split_items[:, 0].sum() > 0:
-                self.head_scores(valid_pred[split_items[:, 0]], valid_target[split_items[:, 0]])
-                self.head_accuracy(valid_pred[split_items[:, 0]], valid_target[split_items[:, 0]])
-            if split_items[:, 1].sum() > 0:
-                self.common_scores(valid_pred[split_items[:, 1]], valid_target[split_items[:, 1]])
-                self.common_accuracy(valid_pred[split_items[:, 1]], valid_target[split_items[:, 1]])
-            if split_items[:, 2].sum() > 0:
-                self.tail_scores(valid_pred[split_items[:, 2]], valid_target[split_items[:, 2]])
-                self.tail_accuracy(valid_pred[split_items[:, 2]], valid_target[split_items[:, 2]])
+        # if split_items is not None:
+        valid_pred = pred[target != self.config.ignore_label]
+        valid_target = target[target != self.config.ignore_label]
 
-        if valid_target.sum() > 0:
+        print(f"Pred sum: {valid_pred.sum()} - Target sum: {valid_target.sum()}")
+
+        self.head_scores(valid_target, valid_target)
+        self.head_accuracy(valid_pred, valid_target)
+        # if split_items[:, 1].sum() > 0:
+        #     self.common_scores(valid_pred[split_items[:, 1]], valid_target[split_items[:, 1]])
+        #     self.common_accuracy(valid_pred[split_items[:, 1]], valid_target[split_items[:, 1]])
+        # if split_items[:, 2].sum() > 0:
+        #     self.tail_scores(valid_pred[split_items[:, 2]], valid_target[split_items[:, 2]])
+        #     self.tail_accuracy(valid_pred[split_items[:, 2]], valid_target[split_items[:, 2]])
+
+        if valid_mask.to(torch.int).sum() > 0:
             self.losses(loss.clone().detach(), target.size(0))
             self.scores(pred[valid_mask], target[valid_mask])
             self.accuracy(pred[valid_mask], target[valid_mask])
@@ -379,6 +403,7 @@ class BaselineTrainerModule(LightningModule):
 
             self.aps = torch.vstack((self.aps, torch.tensor(self.average_precision(prob, target), device='cpu')))
             self.average_precision.reset()
+        # self.losses(loss.clone().detach(), target.size(0))
 
         prediction_dict = {'final_pred': pred, 'final_target': target,
                            'coords': sinput.C, 'colors': sinput.F,
@@ -413,5 +438,25 @@ class BaselineTrainerModule(LightningModule):
             # Freeze every layer except final
             for param in self.model.parameters():
                 param.requires_grad = False
+
             for param in self.model.final.parameters():
                 param.requires_grad = True
+
+            decoder_modules = [
+                self.model.block5,
+                self.model.convtr5p8s2,
+                self.model.bntr5,
+
+                self.model.block6,
+                self.model.convtr6p4s2,
+                self.model.bntr6,
+
+                self.model.block7,
+                self.model.convtr7p2s2,
+                self.model.bntr7,
+
+                self.model.block8,
+            ]
+            for decoder_module in decoder_modules:
+                for param in decoder_module.parameters():
+                    param.requires_grad = True

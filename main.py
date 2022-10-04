@@ -12,6 +12,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
 import random
 import string
+import lib.transforms as t
 
 # Torch packages
 import torch
@@ -26,6 +27,8 @@ from lib.datasets import load_dataset
 from models import load_model, load_wrapper
 
 import MinkowskiEngine as ME
+
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 ch = logging.StreamHandler(sys.stdout)
 logging.getLogger().setLevel(logging.INFO)
@@ -76,7 +79,8 @@ def main():
         shuffle=True,
         repeat=True,
         batch_size=config.batch_size,
-        limit_numpoints=config.train_limit_numpoints)
+        limit_numpoints=config.train_limit_numpoints,
+        collate_function=t.cfl_collate_fn_factory)
 
     if data_loader.dataset.NUM_IN_CHANNEL is not None:
         num_in_channel = data_loader.dataset.NUM_IN_CHANNEL
@@ -179,8 +183,9 @@ def main():
     run_name = config.model + '-' + config.dataset if config.is_train else config.model + "_test"
 
     # Try a few times to avoid init error based on connection
-    loggers = [tensorboard_logger]
-    while config.is_train and False:
+    # loggers = [tensorboard_logger]
+    loggers = []
+    while True:
         try:
             wandb_logger = WandbLogger(project="lg_semseg", name=run_name, log_model=False, id=config.wandb_id)
             loggers += [wandb_logger]

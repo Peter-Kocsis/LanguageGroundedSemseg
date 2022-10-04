@@ -140,41 +140,41 @@ class Res16UNet34CR(Res16UNet34C):
         out = self.conv4p8s2(out_b3p8)
         out = self.bn4(out)
         out = self.relu(out)
-        out = self.block4(out)
+        out_b4p16 = self.block4(out)
 
         # 1/16 resolution -> 1/8
         # up_stride 2, dilation 1
-        out = self.convtr4p16s2(out)
+        out = self.convtr4p16s2(out_b4p16)
         out = self.bntr4(out)
         out = self.relu(out)
 
         # Concat with res 1/8
         out = me.cat(out, out_b3p8)
-        out = self.block5(out)
+        out_b5p8 = self.block5(out)
 
         # 1/8 resolution -> 1/4
         # up_stride 2, dilation 1
-        out = self.convtr5p8s2(out)
+        out = self.convtr5p8s2(out_b5p8)
         out = self.bntr5(out)
         out = self.relu(out)
 
         # Concat with res 1/4
         out = me.cat(out, out_b2p4)
-        out = self.block6(out)
+        out_b6p4 = self.block6(out)
 
         # 1/4 resolution -> 1/2
         # up_stride 2, dilation 1
-        out = self.convtr6p4s2(out)
+        out = self.convtr6p4s2(out_b6p4)
         out = self.bntr6(out)
         out = self.relu(out)
 
         # Concat with res 1/2
         out = me.cat(out, out_b1p2)
-        out = self.block7(out)
+        out_b7p2 = self.block7(out)
 
         # 1/2 resolution -> orig
         # up_stride 2, dilation 1
-        out = self.convtr7p2s2(out)
+        out = self.convtr7p2s2(out_b7p2)
         out = self.bntr7(out)
         out = self.relu(out)
 
