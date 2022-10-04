@@ -113,6 +113,7 @@ opt_arg.add_argument('--reduce_patience', type=float, default=20)
 
 # Directories
 dir_arg = add_argument_group('Directories')
+dir_arg.add_argument('--wandb_logdir', type=str, default='')
 dir_arg.add_argument('--log_dir', type=str, default='outputs/default')
 dir_arg.add_argument('--data_dir', type=str, default='data')
 dir_arg.add_argument('--child_label_mapper', type=str, default='child_classifier_mapping_30_ids.pkl',

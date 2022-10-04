@@ -187,7 +187,7 @@ def main():
     loggers = []
     while True:
         try:
-            wandb_logger = WandbLogger(project="lg_semseg", name=run_name, log_model=False, id=config.wandb_id)
+            wandb_logger = WandbLogger(project="lg_semseg", name=run_name, log_model=False, id=config.wandb_id, save_dir=config.wandb_logdir)
             loggers += [wandb_logger]
             break
         except:
