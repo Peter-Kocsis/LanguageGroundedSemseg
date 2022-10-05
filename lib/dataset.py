@@ -373,14 +373,14 @@ def initialize_data_loader(DatasetClass,
     if augment_data:
         input_transforms += [
             t.RandomHorizontalFlip(DatasetClass.ROTATION_AXIS, DatasetClass.IS_TEMPORAL),
-            t.ChromaticAutoContrast(),
-            t.ChromaticTranslation(config.data_aug_color_trans_ratio),
-            t.ChromaticJitter(config.data_aug_color_jitter_std),
+            # t.ChromaticAutoContrast(),
+            # t.ChromaticTranslation(config.data_aug_color_trans_ratio),
+            # t.ChromaticJitter(config.data_aug_color_jitter_std),
             # t.HueSaturationTranslation(config.data_aug_hue_max, config.data_aug_saturation_max),
         ]
 
-    if config.data_aug_color_scaling_factor != 1.0:
-        input_transforms += [t.ChromaticScale(scale_factor=config.data_aug_color_scaling_factor)]
+    # if config.data_aug_color_scaling_factor != 1.0:
+    #     input_transforms += [t.ChromaticScale(scale_factor=config.data_aug_color_scaling_factor)]
 
     if config.data_aug_patch_dropout_ratio == 0.:
         input_transforms += [t.RandomDropout(0.2)]

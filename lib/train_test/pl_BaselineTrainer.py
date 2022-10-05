@@ -88,8 +88,8 @@ class BaselineTrainerModule(LightningModule):
             limit_numpoints=self.config.train_limit_numpoints,
             collate_function=t.cft_collate_fn_factory)
 
-        return self.val_dataloader()
-        # return train_data_loader
+        # return self.val_dataloader()
+        return train_data_loader
 
     def init_criterions(self):
 
@@ -321,9 +321,9 @@ class BaselineTrainerModule(LightningModule):
 
         coords, input, target, scene_name, *transform = batch
 
-        # # For some networks, making the network invariant to even, odd coords is important. Random translation
-        # if mode == 'training':
-        #     coords[:, 1:] += (torch.rand(3) * 100).type_as(coords)
+        # For some networks, making the network invariant to even, odd coords is important. Random translation
+        if mode == 'training':
+            coords[:, 1:] += (torch.rand(3) * 100).type_as(coords)
 
         # Preprocess input
         color = input[:, :3].int()
