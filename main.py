@@ -197,7 +197,8 @@ def main():
     trainer = Trainer(max_epochs=config.max_epoch, logger=loggers,
                       devices=num_devices, accelerator="gpu", strategy=DDPPlugin(find_unused_parameters=True),
                       num_sanity_val_steps=4, accumulate_grad_batches=1,
-                      callbacks=[*checkpoint_callbacks, CleanCacheCallback()])
+                      callbacks=[*checkpoint_callbacks, CleanCacheCallback()],
+                      val_check_interval=config.val_freq)
 
     pl_module = TrainerModule(model, config, data_loader.dataset)
     if config.is_train:
