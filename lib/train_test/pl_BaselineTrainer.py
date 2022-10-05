@@ -146,10 +146,20 @@ class BaselineTrainerModule(LightningModule):
         # Reset accumulators
         self.reset_accumulators()
 
-    def on_validation_epoch_start(self):
-        # We have to log the training scores here due to the order of hooks
+    def on_train_epoch_end(self):
         if self.config.is_train:
             self.loop_log('training')
+
+        # put criterions to device
+        self.criterion = self.criterion.to(self.device)
+
+        # Reset accumulators
+        self.reset_accumulators()
+
+    def on_validation_epoch_start(self):
+        # # We have to log the training scores here due to the order of hooks
+        # if self.config.is_train:
+        #     self.loop_log('training')
 
         # put criterions to device
         self.criterion = self.criterion.to(self.device)
