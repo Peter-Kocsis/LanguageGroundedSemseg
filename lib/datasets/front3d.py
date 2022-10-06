@@ -40,7 +40,7 @@ class Front3DLightingGeometryDataset(VoxelizationDataset):
     TRANSLATION_AUGMENTATION_RATIO_BOUND = ((-0.2, 0.2), (-0.2, 0.2), (0, 0))
     ELASTIC_DISTORT_PARAMS = ((0.2, 0.4), (0.8, 1.6))
 
-    ROTATION_AXIS = 'y'
+    ROTATION_AXIS = 'z'
     LOCFEAT_IDX = 2
     NUM_LABELS = 2
     IGNORE_LABELS = tuple()
