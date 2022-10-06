@@ -168,7 +168,7 @@ class BaselineTrainerModule(LightningModule):
         self.reset_accumulators()
 
     def training_step(self, batch, batch_idx):
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         model_output = self.model_step(batch, batch_idx, mode='training')
         return self.eval_step(model_output)
 
@@ -197,7 +197,7 @@ class BaselineTrainerModule(LightningModule):
         return outputs
 
     def validation_step(self, batch, batch_idx):
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         model_output = self.model_step(batch, batch_idx, mode='validation')
         return self.eval_step(model_output)
 

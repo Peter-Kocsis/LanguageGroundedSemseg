@@ -282,6 +282,10 @@ balance_arg.add_argument('--balanced_category_sampling', type=str2bool, default=
 balance_arg.add_argument('--balanced_sample_head_ratio', type=float, default=-1)
 balance_arg.add_argument('--balanced_sample_common_ratio', type=float, default=-1)
 
+# Caching
+cache_arg = add_argument_group('Caching')
+cache_arg.add_argument('--cache', type=str2bool, default=False)
+misc_arg.add_argument('--scene_idx', type=int, default=None)
 
 def get_config():
     config = parser.parse_args()

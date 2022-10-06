@@ -6,6 +6,8 @@ import sys
 import time
 
 import numpy as np
+from MinkowskiEngine.MinkowskiInterpolation import MinkowskiInterpolation
+from MinkowskiEngine.MinkowskiTensorField import TensorField
 from pytorch_lightning import Trainer, Callback
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 import pytorch_lightning as pl
@@ -20,7 +22,7 @@ import torch
 # Train deps
 from config.config import get_config
 
-from lib.utils import load_state_with_same_shape, count_parameters
+from lib.utils import load_state_with_same_shape, count_parameters, visualize_results
 from lib.dataset import initialize_data_loader
 from lib.datasets import load_dataset
 
@@ -182,29 +184,79 @@ def main():
     tensorboard_logger = TensorBoardLogger(log_folder, default_hp_metric=False, log_graph=True, version=version_num)
     run_name = config.model + '-' + config.dataset if config.is_train else config.model + "_test"
 
-    # Try a few times to avoid init error based on connection
-    # loggers = [tensorboard_logger]
-    loggers = []
-    while True:
-        try:
-            wandb_logger = WandbLogger(project="lg_semseg", name=run_name, log_model=False, id=config.wandb_id, save_dir=config.wandb_logdir)
-            loggers += [wandb_logger]
-            break
-        except:
-            print("Retrying WanDB connection...")
-            time.sleep(10)
+    if config.cache:
+        if config.scene_idx is None:
+            raise NotImplementedError()
+        else:
+            config.val_batch_size = 1
 
-    trainer = Trainer(max_epochs=config.max_epoch, logger=loggers,
-                      devices=num_devices, accelerator="gpu", strategy=DDPPlugin(find_unused_parameters=True),
-                      num_sanity_val_steps=4, accumulate_grad_batches=1,
-                      callbacks=[*checkpoint_callbacks, CleanCacheCallback()],
-                      check_val_every_n_epoch=config.val_freq)
+            pl_module = TrainerModule(model, config, data_loader.dataset)
+            dataloader = pl_module.val_dataloader()
 
-    pl_module = TrainerModule(model, config, data_loader.dataset)
-    if config.is_train:
-        trainer.fit(pl_module, ckpt_path=config.resume)
+            for scene_idx, data in enumerate(dataloader):
+                if scene_idx != config.scene_idx:
+                    continue
+                outputs = pl_module.training_step(batch=data, batch_idx=scene_idx)
+
+                class_ids = np.arange(pl_module.num_labels)
+
+                label_mapper = lambda t: pl_module.dataset.inverse_label_map[t]
+                target = outputs['final_target'].cpu().apply_(label_mapper)
+                pred = outputs['final_pred'].cpu().apply_(label_mapper)
+                invalid_parents = target == pl_module.config.ignore_label
+                pred[invalid_parents] = pl_module.config.ignore_label
+
+                visualize_results(coords=outputs['coords'], colors=outputs['colors'], target=target,
+                                  prediction=pred, config=pl_module.config, iteration=pl_module.global_step,
+                                  num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
+                                  valid_labels=class_ids, save_npy=True,
+                                  scene_name=outputs['scene_name'])
+
+                # Get predictions for all voxel centers at a coarser resolution
+                pred_tensor = TensorField(features=pred[:, None], coordinates=outputs['coords'])
+
+                world_coords, world_feats, world_targets, scene_name = data_loader.dataset.load_sample(0)
+                scene_min = world_coords.min(axis=0)
+                scene_max = world_coords.max(axis=0)
+                coarse_coords = torch.cartesian_prod(
+                    torch.arange(start=scene_min[0] + 0.1, end=scene_max[0] + 0.1, step=0.2),
+                    torch.arange(start=scene_min[1] + 0.1, end=scene_max[1] + 0.1, step=0.2),
+                    torch.arange(start=scene_min[2] + 0.1, end=scene_max[2] + 0.1, step=0.2),
+                )
+
+                mink_interpolator = MinkowskiInterpolation()
+                coarse_grid_preds = mink_interpolator(input=pred_tensor, tfield=coarse_coords)
+                print("Done")
+
+
+
+
+
     else:
-        trainer.test(pl_module, ckpt_path=config.resume)
+        # Try a few times to avoid init error based on connection
+        # loggers = [tensorboard_logger]
+        loggers = []
+        while True:
+            try:
+                wandb_logger = WandbLogger(project="lg_semseg", name=run_name, log_model=False, id=config.wandb_id,
+                                           save_dir=config.wandb_logdir)
+                loggers += [wandb_logger]
+                break
+            except:
+                print("Retrying WanDB connection...")
+                time.sleep(10)
+
+        trainer = Trainer(max_epochs=config.max_epoch, logger=loggers,
+                          devices=num_devices, accelerator="gpu", strategy=DDPPlugin(find_unused_parameters=True),
+                          num_sanity_val_steps=4, accumulate_grad_batches=1,
+                          callbacks=[*checkpoint_callbacks, CleanCacheCallback()],
+                          check_val_every_n_epoch=config.val_freq)
+
+        pl_module = TrainerModule(model, config, data_loader.dataset)
+        if config.is_train:
+            trainer.fit(pl_module, ckpt_path=config.resume)
+        else:
+            trainer.test(pl_module, ckpt_path=config.resume)
 
 
 if __name__ == '__main__':

@@ -100,11 +100,23 @@ class Front3DLightingGeometryDataset(VoxelizationDataset):
         self.aug_scale_prob = config.instance_augmentation_scale_aug_prob
 
         # Dummy values for the framework
-        self.category_weights = torch.tensor([2e-1, 5.1])
+        # self.category_weights = torch.tensor([2e-1, 5.1])
+        self.category_weights = self.collect_category_weights()
         self.frequency_organized_cats = None
         self.head_ids = [0, 1]
         self.common_ids = []
         self.tail_ids = []
+
+    def collect_category_weights(self):
+        num_all_points = 0
+        num_lamp_points = 0
+        for sample_idx in range(len(self)):
+            _, _, targets, _ = self.load_sample(sample_idx)
+
+            num_all_points += len(targets)
+            num_lamp_points += targets.sum()
+        return torch.log(torch.tensor([num_lamp_points, (num_all_points - num_lamp_points)])) / torch.log(torch.tensor(num_all_points))
+        # return torch.tensor([num_lamp_points, (num_all_points - num_lamp_points)]) / torch.tensor(num_all_points)
 
     def add_instances_to_cloud(self, coords, feats, labels, scene_name, transformations):
 
@@ -297,11 +309,7 @@ class Front3DLightingGeometryDataset(VoxelizationDataset):
 
         return coords, feats, targets, scene_name
 
-    def __getitem__(self, index):
-
-        coords, feats, targets, scene_name = self.load_sample(index)
-        scene_name = scene_name.split('/')[-1].split('.')[0]
-
+    def data_transforms(self, coords, feats, targets, scene_name):
         # Downsample the pointcloud with finer voxel size before transformation for memory and speed
         if self.PREVOXELIZATION_VOXEL_SIZE is not None:
             _, inds = ME.utils.sparse_quantize(coords / self.PREVOXELIZATION_VOXEL_SIZE, return_index=True)
@@ -331,6 +339,14 @@ class Front3DLightingGeometryDataset(VoxelizationDataset):
         # Use coordinate features if config is set
         if self.AUGMENT_COORDS_TO_FEATS:
             coords, feats, targets = self._augment_coords_to_feats(coords, feats, targets)
+
+        return coords, feats, targets, transformations
+
+    def __getitem__(self, index):
+        coords, feats, targets, scene_name = self.load_sample(index)
+        scene_name = scene_name.split('/')[-1].split('.')[0]
+
+        coords, feats, targets, transformations = self.data_transforms(coords, feats, targets, scene_name)
 
         return_args = [coords, feats, targets, scene_name]
 
