@@ -22,5 +22,6 @@
 
 export PYTHONUNBUFFERED="True"
 
+SLURM_NODENAME=$(hostname | cut -f1 -d".")
 echo Starting 3DFront Lamp Segmentation training on $SLURM_NODENAME with parameters: $SCRIPT_ARGUMENTS
 python -m main $SCRIPT_ARGUMENTS
