@@ -439,6 +439,8 @@ def visualize_results(coords, colors, target,
         filename_features_np = '_'.join([base_file_name, 'final_feats', scene_name[0]])
         np.save(os.path.join(config.visualize_path, filename_features_np), output_features.cpu().numpy())
 
+    return xyzlabel_np_pred
+
 
 def save_target_freqs(freqs_dict, target_sum_losses, features_dict, iteration, config):
 

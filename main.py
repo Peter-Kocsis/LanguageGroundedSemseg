@@ -4,9 +4,14 @@ import logging
 import os
 import sys
 import time
+import inspect
 
 import numpy as np
 from MinkowskiEngine.MinkowskiInterpolation import MinkowskiInterpolation
+from MinkowskiEngine.MinkowskiPooling import MinkowskiMaxPooling
+from MinkowskiEngine.MinkowskiSparseTensor import SparseTensor
+sys.path.append(os.path.dirname(inspect.getfile(SparseTensor)))
+from MinkowskiTensor import SparseTensorQuantizationMode
 from MinkowskiEngine.MinkowskiTensorField import TensorField
 from pytorch_lightning import Trainer, Callback
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
@@ -25,10 +30,13 @@ from config.config import get_config
 from lib.utils import load_state_with_same_shape, count_parameters, visualize_results
 from lib.dataset import initialize_data_loader
 from lib.datasets import load_dataset
+from lib.voxelizer import Voxelizer
 
 from models import load_model, load_wrapper
 
 import MinkowskiEngine as ME
+
+
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
@@ -196,7 +204,8 @@ def main():
             for scene_idx, data in enumerate(dataloader):
                 if scene_idx != config.scene_idx:
                     continue
-                outputs = pl_module.training_step(batch=data, batch_idx=scene_idx)
+                outputs = pl_module.model_step(batch=data, batch_idx=scene_idx, mode='validation')
+                outputs = pl_module.eval_step(outputs)
 
                 class_ids = np.arange(pl_module.num_labels)
 
@@ -210,22 +219,43 @@ def main():
                                   prediction=pred, config=pl_module.config, iteration=pl_module.global_step,
                                   num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
                                   valid_labels=class_ids, save_npy=True,
-                                  scene_name=outputs['scene_name'])
+                                  scene_name=outputs['scene_name'],
+                                  name_prefix='eval')
 
                 # Get predictions for all voxel centers at a coarser resolution
                 pred_tensor = TensorField(features=pred[:, None], coordinates=outputs['coords'])
 
-                world_coords, world_feats, world_targets, scene_name = data_loader.dataset.load_sample(0)
-                scene_min = world_coords.min(axis=0)
-                scene_max = world_coords.max(axis=0)
-                coarse_coords = torch.cartesian_prod(
-                    torch.arange(start=scene_min[0] + 0.1, end=scene_max[0] + 0.1, step=0.2),
-                    torch.arange(start=scene_min[1] + 0.1, end=scene_max[1] + 0.1, step=0.2),
-                    torch.arange(start=scene_min[2] + 0.1, end=scene_max[2] + 0.1, step=0.2),
-                )
+                fine_coords = data[0]
+                # Create 20cm grid
+                coarse_coords = torch.floor(fine_coords / 10)
+                # coarse_coords = coarse_coords + coarse_coords.min(dim=0, keepdim=True)[0]
 
-                mink_interpolator = MinkowskiInterpolation()
-                coarse_grid_preds = mink_interpolator(input=pred_tensor, tfield=coarse_coords)
+                target_tensor = SparseTensor(features=target[:, None].to(torch.float),
+                                             coordinates=coarse_coords,
+                                             quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
+                prediction_tensor = SparseTensor(features=pred[:, None].to(torch.float),
+                                                 coordinates=coarse_coords,
+                                                 quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
+                coarse_coords = prediction_tensor.C
+                coarse_pred = (prediction_tensor.F > 0.5).to(torch.int)
+                coarse_target = (target_tensor.F > 0.5).to(torch.int)
+
+                # Convert to Mitsuba convention
+                coarse_coords = torch.index_select(coarse_coords.cpu(), 1, torch.LongTensor([0, 1, 3, 2])) * torch.Tensor([[1, 1, 1, -1]])
+                coarse_coords = coarse_coords.to("cuda")
+                coarse_coords -= coarse_coords.min(dim=0, keepdim=True)[0]
+
+                visualize_results(coords=coarse_coords,
+                                  colors=torch.zeros((len(coarse_target), 3), device=coarse_coords.device),
+                                  target=coarse_target[:, 0],
+                                  prediction=coarse_pred[:, 0], config=pl_module.config, iteration=pl_module.global_step,
+                                  num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
+                                  valid_labels=class_ids, save_npy=True,
+                                  scene_name=outputs['scene_name'],
+                                  name_prefix='coarse')
+
+
+
                 print("Done")
 
 

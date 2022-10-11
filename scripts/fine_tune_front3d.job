@@ -20,7 +20,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=peter.kocsis@tum.de
 
-
 export PYTHONUNBUFFERED="True"
 
+echo Starting 3DFront Lamp Segmentation training on $SLURM_NODENAME with parameters: $SCRIPT_ARGUMENTS
 python -m main $SCRIPT_ARGUMENTS
