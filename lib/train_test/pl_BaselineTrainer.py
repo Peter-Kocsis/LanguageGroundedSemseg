@@ -417,7 +417,7 @@ class BaselineTrainerModule(LightningModule):
 
         prediction_dict = {'final_pred': pred, 'final_target': target,
                            'coords': sinput.C, 'colors': sinput.F,
-                           'output_features': prob}
+                           'output_features': prob, 'feature_maps': feature_maps}
 
         loss_dict = {'loss': loss}
         visualize_dict = {'scene_name': scene_name, 'sinput': sinput}

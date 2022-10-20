@@ -1,4 +1,5 @@
 # Change dataloader multiprocess start method to anything not fork
+import functools
 import glob
 import logging
 import os
@@ -49,6 +50,34 @@ logging.basicConfig(
 
 def randStr(chars = string.ascii_lowercase + string.digits, N=10):
     return ''.join(random.choice(chars) for _ in range(N))
+
+
+def rgetattr(obj, attr, *args):
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+
+    return functools.reduce(_getattr, [obj] + attr.split('.'))
+
+
+def inspect_layer_output(model, layer_path, storage_dict: dict, name: str = None, unsqueeze: bool = True, index_to_inspect: int = None, skip_if_no_grad: bool = True):
+    if name is None:
+        name = layer_path
+
+    def hook(model, input, output):
+        if skip_if_no_grad and not torch.is_grad_enabled():
+            return
+
+        if index_to_inspect is not None:
+            output = output[index_to_inspect]
+        if unsqueeze:
+            output = output.unsqueeze(0)
+        if name in storage_dict:
+            storage_dict[name] = torch.cat((storage_dict[name], output), dim=0)
+        else:
+            storage_dict[name] = output
+
+    return rgetattr(model, layer_path).register_forward_hook(hook)
+
 
 class CleanCacheCallback(Callback):
 
@@ -204,14 +233,28 @@ def main():
             for scene_idx, data in enumerate(dataloader):
                 if scene_idx != config.scene_idx:
                     continue
+
+                # inspected_variables = {}
+                # hooks = []
+                # hooks.append(inspect_layer_output(model=pl_module,
+                #                                   layer_path="model.block8",
+                #                                   storage_dict=inspected_variables,
+                #                                   unsqueeze=False,
+                #                                   index_to_inspect=0))
+
                 outputs = pl_module.model_step(batch=data, batch_idx=scene_idx, mode='validation')
                 outputs = pl_module.eval_step(outputs)
+
+                # # Remove hook handlers
+                # for hook in hooks:
+                #     hook.remove()
 
                 class_ids = np.arange(pl_module.num_labels)
 
                 label_mapper = lambda t: pl_module.dataset.inverse_label_map[t]
                 target = outputs['final_target'].cpu().apply_(label_mapper)
                 pred = outputs['final_pred'].cpu().apply_(label_mapper)
+                feat = outputs['feature_maps'].F.cpu()
                 invalid_parents = target == pl_module.config.ignore_label
                 pred[invalid_parents] = pl_module.config.ignore_label
 
@@ -236,8 +279,12 @@ def main():
                 prediction_tensor = SparseTensor(features=pred[:, None].to(torch.float),
                                                  coordinates=coarse_coords,
                                                  quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
+                feature_tensor = SparseTensor(features=feat.to(torch.float),
+                                                 coordinates=coarse_coords,
+                                                 quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
                 coarse_coords = prediction_tensor.C
                 coarse_pred = (prediction_tensor.F > 0.5).to(torch.int)
+                coarse_feat = feature_tensor.F
                 coarse_target = (target_tensor.F > 0.5).to(torch.int)
 
                 # Convert to Mitsuba convention
@@ -254,7 +301,26 @@ def main():
                                   scene_name=outputs['scene_name'],
                                   name_prefix='coarse')
 
+                # Save the features
+                base_file_name = '_'.join([config.dataset, config.model, 'feat_'])
 
+                prediction = coarse_feat.detach()
+                target = coarse_target[:, 0]
+                input_xyz = coarse_coords[:, 1:]
+                target_batch = (coarse_coords[:, 0] == 0).detach().cpu()
+                target_valid = torch.ne(target, config.ignore_label).detach()
+                batch_ids = torch.logical_and(target_batch, target_valid)
+                target_nonpred = torch.logical_and(target_batch, ~target_valid)  # type: torch.Tensor
+
+                ptc_nonpred_np = np.hstack(
+                    (input_xyz[target_nonpred].cpu().numpy(),
+                     np.zeros((torch.sum(target_nonpred).item(), 1))))  # type: np.ndarray
+
+                input_xyz_np = input_xyz[batch_ids].cpu().numpy()
+                xyzlabel_np_pred = np.hstack((input_xyz_np, prediction[batch_ids.detach().numpy()]))  # type: np.ndarray
+
+                filename_pred_np = '_'.join([base_file_name, 'pred',])
+                np.save(os.path.join(config.visualize_path, filename_pred_np), xyzlabel_np_pred)
 
                 print("Done")
 
