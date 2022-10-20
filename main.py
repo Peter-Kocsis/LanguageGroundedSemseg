@@ -221,108 +221,97 @@ def main():
     tensorboard_logger = TensorBoardLogger(log_folder, default_hp_metric=False, log_graph=True, version=version_num)
     run_name = config.model + '-' + config.dataset if config.is_train else config.model + "_test"
 
+
+
     if config.cache:
-        if config.scene_idx is None:
-            raise NotImplementedError()
-        else:
-            config.val_batch_size = 1
+        config.val_batch_size = 1
 
-            pl_module = TrainerModule(model, config, data_loader.dataset)
-            dataloader = pl_module.val_dataloader()
+        pl_module = TrainerModule(model, config, data_loader.dataset)
+        dataloader = pl_module.val_dataloader()
 
-            for scene_idx, data in enumerate(dataloader):
-                if scene_idx != config.scene_idx:
-                    continue
+        visualize_path = config.visualize_path
+        for scene_idx, data in enumerate(dataloader):
+            if config.scene_idx is not None and scene_idx != config.scene_idx:
+                continue
 
-                # inspected_variables = {}
-                # hooks = []
-                # hooks.append(inspect_layer_output(model=pl_module,
-                #                                   layer_path="model.block8",
-                #                                   storage_dict=inspected_variables,
-                #                                   unsqueeze=False,
-                #                                   index_to_inspect=0))
+            relative_room_folder = data_loader.dataset.data_paths[scene_idx]
+            config.visualize_path = os.path.join(config.visualize_path, relative_room_folder)
 
-                outputs = pl_module.model_step(batch=data, batch_idx=scene_idx, mode='validation')
-                outputs = pl_module.eval_step(outputs)
+            outputs = pl_module.model_step(batch=data, batch_idx=scene_idx, mode='validation')
+            outputs = pl_module.eval_step(outputs)
 
-                # # Remove hook handlers
-                # for hook in hooks:
-                #     hook.remove()
+            class_ids = np.arange(pl_module.num_labels)
 
-                class_ids = np.arange(pl_module.num_labels)
+            label_mapper = lambda t: pl_module.dataset.inverse_label_map[t]
+            target = outputs['final_target'].cpu().apply_(label_mapper)
+            pred = outputs['final_pred'].cpu().apply_(label_mapper)
+            feat = outputs['feature_maps'].F.cpu()
+            invalid_parents = target == pl_module.config.ignore_label
+            pred[invalid_parents] = pl_module.config.ignore_label
 
-                label_mapper = lambda t: pl_module.dataset.inverse_label_map[t]
-                target = outputs['final_target'].cpu().apply_(label_mapper)
-                pred = outputs['final_pred'].cpu().apply_(label_mapper)
-                feat = outputs['feature_maps'].F.cpu()
-                invalid_parents = target == pl_module.config.ignore_label
-                pred[invalid_parents] = pl_module.config.ignore_label
+            # visualize_results(coords=outputs['coords'], colors=outputs['colors'], target=target,
+            #                   prediction=pred, config=pl_module.config, iteration=pl_module.global_step,
+            #                   num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
+            #                   valid_labels=class_ids, save_npy=True,
+            #                   scene_name=outputs['scene_name'],
+            #                   name_prefix='eval')
 
-                visualize_results(coords=outputs['coords'], colors=outputs['colors'], target=target,
-                                  prediction=pred, config=pl_module.config, iteration=pl_module.global_step,
-                                  num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
-                                  valid_labels=class_ids, save_npy=True,
-                                  scene_name=outputs['scene_name'],
-                                  name_prefix='eval')
+            # Get predictions for all voxel centers at a coarser resolution
+            pred_tensor = TensorField(features=pred[:, None], coordinates=outputs['coords'])
 
-                # Get predictions for all voxel centers at a coarser resolution
-                pred_tensor = TensorField(features=pred[:, None], coordinates=outputs['coords'])
+            fine_coords = data[0]
+            # Create 20cm grid
+            coarse_coords = torch.floor(fine_coords / 10)
+            # coarse_coords = coarse_coords + coarse_coords.min(dim=0, keepdim=True)[0]
 
-                fine_coords = data[0]
-                # Create 20cm grid
-                coarse_coords = torch.floor(fine_coords / 10)
-                # coarse_coords = coarse_coords + coarse_coords.min(dim=0, keepdim=True)[0]
-
-                target_tensor = SparseTensor(features=target[:, None].to(torch.float),
+            target_tensor = SparseTensor(features=target[:, None].to(torch.float),
+                                         coordinates=coarse_coords,
+                                         quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
+            prediction_tensor = SparseTensor(features=pred[:, None].to(torch.float),
                                              coordinates=coarse_coords,
                                              quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
-                prediction_tensor = SparseTensor(features=pred[:, None].to(torch.float),
-                                                 coordinates=coarse_coords,
-                                                 quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
-                feature_tensor = SparseTensor(features=feat.to(torch.float),
-                                                 coordinates=coarse_coords,
-                                                 quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
-                coarse_coords = prediction_tensor.C
-                coarse_pred = (prediction_tensor.F > 0.5).to(torch.int)
-                coarse_feat = feature_tensor.F
-                coarse_target = (target_tensor.F > 0.5).to(torch.int)
+            feature_tensor = SparseTensor(features=feat.to(torch.float),
+                                             coordinates=coarse_coords,
+                                             quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
+            coarse_coords = prediction_tensor.C
+            coarse_pred = (prediction_tensor.F > 0.5).to(torch.int)
+            coarse_feat = feature_tensor.F
+            coarse_target = (target_tensor.F > 0.5).to(torch.int)
 
-                # Convert to Mitsuba convention
-                coarse_coords = torch.index_select(coarse_coords.cpu(), 1, torch.LongTensor([0, 1, 3, 2])) * torch.Tensor([[1, 1, 1, -1]])
-                coarse_coords = coarse_coords.to("cuda")
-                coarse_coords -= coarse_coords.min(dim=0, keepdim=True)[0]
+            # Convert to Mitsuba convention
+            coarse_coords = torch.index_select(coarse_coords.cpu(), 1, torch.LongTensor([0, 1, 3, 2])) * torch.Tensor([[1, 1, 1, -1]])
+            coarse_coords = coarse_coords.to("cuda")
+            coarse_coords -= coarse_coords.min(dim=0, keepdim=True)[0]
 
-                visualize_results(coords=coarse_coords,
-                                  colors=torch.zeros((len(coarse_target), 3), device=coarse_coords.device),
-                                  target=coarse_target[:, 0],
-                                  prediction=coarse_pred[:, 0], config=pl_module.config, iteration=pl_module.global_step,
-                                  num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
-                                  valid_labels=class_ids, save_npy=True,
-                                  scene_name=outputs['scene_name'],
-                                  name_prefix='coarse')
+            visualize_results(coords=coarse_coords,
+                              colors=torch.zeros((len(coarse_target), 3), device=coarse_coords.device),
+                              target=coarse_target[:, 0],
+                              prediction=coarse_pred[:, 0], config=pl_module.config, iteration=pl_module.global_step,
+                              num_labels=pl_module.num_labels, train_iteration=pl_module.global_step,
+                              valid_labels=class_ids, save_npy=True,
+                              scene_name=outputs['scene_name'],
+                              name_prefix='coarse')
 
-                # Save the features
-                base_file_name = '_'.join([config.dataset, config.model, 'feat_'])
+            # Save the features
 
-                prediction = coarse_feat.detach()
-                target = coarse_target[:, 0]
-                input_xyz = coarse_coords[:, 1:]
-                target_batch = (coarse_coords[:, 0] == 0).detach().cpu()
-                target_valid = torch.ne(target, config.ignore_label).detach()
-                batch_ids = torch.logical_and(target_batch, target_valid)
-                target_nonpred = torch.logical_and(target_batch, ~target_valid)  # type: torch.Tensor
+            prediction = coarse_feat.detach()
+            target = coarse_target[:, 0]
+            input_xyz = coarse_coords[:, 1:]
+            target_batch = (coarse_coords[:, 0] == 0).detach().cpu()
+            target_valid = torch.ne(target, config.ignore_label).detach()
+            batch_ids = torch.logical_and(target_batch, target_valid)
+            target_nonpred = torch.logical_and(target_batch, ~target_valid)  # type: torch.Tensor
 
-                ptc_nonpred_np = np.hstack(
-                    (input_xyz[target_nonpred].cpu().numpy(),
-                     np.zeros((torch.sum(target_nonpred).item(), 1))))  # type: np.ndarray
+            ptc_nonpred_np = np.hstack(
+                (input_xyz[target_nonpred].cpu().numpy(),
+                 np.zeros((torch.sum(target_nonpred).item(), 1))))  # type: np.ndarray
 
-                input_xyz_np = input_xyz[batch_ids].cpu().numpy()
-                xyzlabel_np_pred = np.hstack((input_xyz_np, prediction[batch_ids.detach().numpy()]))  # type: np.ndarray
+            input_xyz_np = input_xyz[batch_ids].cpu().numpy()
+            xyzlabel_np_pred = np.hstack((input_xyz_np, prediction[batch_ids.detach().numpy()]))  # type: np.ndarray
 
-                filename_pred_np = '_'.join([base_file_name, 'pred',])
-                np.save(os.path.join(config.visualize_path, filename_pred_np), xyzlabel_np_pred)
+            np.save(os.path.join(config.visualize_path, "features.npy"), xyzlabel_np_pred)
 
-                print("Done")
+            print("Done")
 
 
 

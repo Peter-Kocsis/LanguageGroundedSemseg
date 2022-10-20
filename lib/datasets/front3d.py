@@ -81,7 +81,11 @@ class Front3DLightingGeometryDataset(VoxelizationDataset):
 
         if phase not in [DatasetPhase.Train, DatasetPhase.TrainVal]:
             self.CLIP_BOUND = self.TEST_CLIP_BOUND
-        data_paths = [subfolder for subfolder in os.listdir(data_root) if os.path.isdir(os.path.join(data_root, subfolder))]
+        data_paths = [os.path.join(subfolder, subsubfolder)
+                      for subfolder in os.listdir(data_root)
+                      if os.path.isdir(os.path.join(data_root, subfolder))
+                      for subsubfolder in os.listdir(os.path.join(data_root, subfolder))
+                      if os.path.isdir(os.path.join(data_root, subfolder, subsubfolder))]
         logging.info('Loading {}: {}'.format(self.__class__.__name__, self.DATA_PATH_FILE[phase]))
         super().__init__(
             data_paths,
