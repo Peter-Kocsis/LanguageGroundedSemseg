@@ -235,7 +235,7 @@ def main():
                 continue
 
             relative_room_folder = data_loader.dataset.data_paths[scene_idx]
-            config.visualize_path = os.path.join(config.visualize_path, relative_room_folder)
+            config.visualize_path = os.path.join(visualize_path, relative_room_folder)
 
             outputs = pl_module.model_step(batch=data, batch_idx=scene_idx, mode='validation')
             outputs = pl_module.eval_step(outputs)
