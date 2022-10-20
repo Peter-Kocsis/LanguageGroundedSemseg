@@ -22,6 +22,7 @@ from lib.datasets.preprocessing.utils import box_intersect
 
 import MinkowskiEngine as ME
 
+
 class Front3DLightingGeometryDataset(VoxelizationDataset):
 
     # Voxelization arguments

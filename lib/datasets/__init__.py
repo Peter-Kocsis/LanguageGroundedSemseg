@@ -1,7 +1,7 @@
 import lib.datasets.stanford as stanford
 import lib.datasets.scannet as scannet
 import lib.datasets.prior_info as prior_info
-from lib.datasets import front3d
+from lib.datasets import front3d, lampsemantics
 
 DATASETS = []
 
@@ -13,7 +13,7 @@ add_datasets(stanford)
 add_datasets(scannet)
 add_datasets(prior_info)
 add_datasets(front3d)
-
+add_datasets(lampsemantics)
 
 def load_dataset(name):
   '''Creates and returns an instance of the datasets given its name.
