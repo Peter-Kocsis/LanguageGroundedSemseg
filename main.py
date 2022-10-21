@@ -310,8 +310,8 @@ def main():
             xyzlabel_np_pred = np.hstack((input_xyz_np, prediction[batch_ids.detach().numpy()]))  # type: np.ndarray
 
             np.save(os.path.join(config.visualize_path, "features.npy"), xyzlabel_np_pred)
-
-            print("Done")
+            print("Scene done")
+        print("Done")
 
 
 
