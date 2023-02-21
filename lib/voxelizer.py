@@ -2,6 +2,7 @@ import collections
 
 import numpy as np
 import MinkowskiEngine as ME
+import torch
 from scipy.linalg import expm, norm
 from scipy.spatial import KDTree
 
@@ -135,8 +136,10 @@ class Voxelizer:
             if augment and self.use_augmentation:
                 rigid_transformation = M_r @ rigid_transformation
 
-            homo_coords = np.hstack((coords, np.ones((coords.shape[0], 1), dtype=coords.dtype)))
-            coords_aug = np.floor(homo_coords @ rigid_transformation.T[:, :3])
+            # homo_coords = np.hstack((coords, np.ones((coords.shape[0], 1), dtype=coords.dtype)))
+            # coords_aug = np.floor(homo_coords @ rigid_transformation.T[:, :3])
+            homo_coords = torch.hstack((coords, torch.ones((coords.shape[0], 1), dtype=coords.dtype)))
+            coords_aug = torch.floor(homo_coords @ rigid_transformation.T[:, :3])
 
             # key = self.hash(coords_aug)  # floor happens by astype(np.uint64)
             _, unique_map = ME.utils.sparse_quantize(coords_aug, return_index=True, ignore_label=self.ignore_label)
@@ -146,7 +149,9 @@ class Voxelizer:
             transforms += [(M_v, M_r)]
 
         if num_pairs == 1:  # Simply return if simple input is required
-            return coords_aug[unique_map], feats[unique_map], labels[unique_map], (M_v, M_r)
+            if labels is not None:
+                labels = labels[unique_map]
+            return coords_aug[unique_map], feats[unique_map], labels, (M_v, M_r)
 
         else:  # Magic indexing for finding correspondences
             u_map0 = unique_maps[0]
