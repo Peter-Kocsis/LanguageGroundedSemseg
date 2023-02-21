@@ -1,10 +1,10 @@
-import models.resunet as resunet
-import models.res16unet as res16unet
-import models.clip_models as clip_models
-import models.classifier_models as classifier_models
+import lgss.resunet as resunet
+import lgss.res16unet as res16unet
+import lgss.clip_models as clip_models
+import lgss.classifier_models as classifier_models
 
 # from models.trilateral_crf import TrilateralCRF
-from models.conditional_random_fields import BilateralCRF, TrilateralCRF
+from lgss.conditional_random_fields import BilateralCRF, TrilateralCRF
 
 MODELS = []
 

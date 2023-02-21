@@ -5,10 +5,10 @@ from torch.autograd import Variable
 from MinkowskiEngine import SparseTensor, MinkowskiConvolution, MinkowskiConvolutionFunction, convert_to_int_tensor
 from MinkowskiEngine import convert_region_type as me_convert_region_type
 
-from models.model import HighDimensionalModel
-from models.wrapper import Wrapper
+from lgss.model import HighDimensionalModel
+from lgss.wrapper import Wrapper
 from lib.math_functions import SparseMM
-from models.modules.common import convert_region_type
+from lgss.modules.common import convert_region_type
 
 
 class MeanField(HighDimensionalModel):

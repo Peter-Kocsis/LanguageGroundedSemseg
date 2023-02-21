@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import MinkowskiEngine as ME
 from MinkowskiEngine import SparseTensor
 
-from models.res16unet import *
-from models.modules.resnet_block import NoReluBlock
+from lgss.res16unet import *
+from lgss.modules.resnet_block import NoReluBlock
 
 class Res16UNet34GloVe(Res16UNet34C100):
 

@@ -1,6 +1,6 @@
-from models.resnet import ResNetBase, get_norm
-from models.modules.common import ConvType, NormType, conv, conv_tr
-from models.modules.resnet_block import BasicBlock, Bottleneck
+from lgss.resnet import ResNetBase, get_norm
+from lgss.modules.common import ConvType, NormType, conv, conv_tr
+from lgss.modules.resnet_block import BasicBlock, Bottleneck
 
 from MinkowskiEngine import MinkowskiReLU
 import MinkowskiEngine.MinkowskiOps as me

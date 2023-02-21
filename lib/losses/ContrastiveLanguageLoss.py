@@ -14,7 +14,7 @@ import numpy as np
 import multiprocessing
 from joblib import Parallel, delayed
 
-from models.projection_models import AttributeFittingModel
+from lgss.projection_models import AttributeFittingModel
 
 
 class ContrastiveLanguageLoss(nn.Module):

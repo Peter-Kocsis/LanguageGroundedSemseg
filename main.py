@@ -23,7 +23,7 @@ from lib.utils import load_state_with_same_shape, count_parameters
 from lib.dataset import initialize_data_loader
 from lib.datasets import load_dataset
 
-from models import load_model, load_wrapper
+from lgss import load_model, load_wrapper
 
 import MinkowskiEngine as ME
 

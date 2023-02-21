@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from models.modules.common import ConvType, NormType, get_norm, conv
+from lgss.modules.common import ConvType, NormType, get_norm, conv
 
 from MinkowskiEngine import MinkowskiReLU
 
