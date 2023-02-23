@@ -106,9 +106,10 @@ class Voxelizer:
                      (coords[:, 2] < (lim[2][1] + center[2])))
         return clip_inds
 
-    def voxelize(self, coords, feats, labels, center=None, augment=True, num_pairs=1, dropout_ratio=0.3, dropout_patch_point_num=30):
+    def voxelize(self, coords, feats=None, labels=None, center=None, augment=True, num_pairs=1, dropout_ratio=0.3, dropout_patch_point_num=30, use_unique_map=True):
         # Check input shape for feats and points
-        assert coords.shape[1] == 3 and coords.shape[0] == feats.shape[0] and coords.shape[0]
+        if feats is not None:
+            assert coords.shape[1] == 3 and coords.shape[0] == feats.shape[0] and coords.shape[0]
         assert num_pairs == 1 or num_pairs == 2
 
         # Clip to smaller size if requested
@@ -138,8 +139,8 @@ class Voxelizer:
 
             # homo_coords = np.hstack((coords, np.ones((coords.shape[0], 1), dtype=coords.dtype)))
             # coords_aug = np.floor(homo_coords @ rigid_transformation.T[:, :3])
-            homo_coords = torch.hstack((coords, torch.ones((coords.shape[0], 1), dtype=coords.dtype)))
-            coords_aug = torch.floor(homo_coords @ rigid_transformation.T[:, :3])
+            homo_coords = torch.hstack((coords, torch.ones((coords.shape[0], 1), dtype=coords.dtype, device=coords.device)))
+            coords_aug = torch.floor(homo_coords @ torch.tensor(rigid_transformation.T[:, :3], dtype=coords.dtype, device=coords.device))
 
             # key = self.hash(coords_aug)  # floor happens by astype(np.uint64)
             _, unique_map = ME.utils.sparse_quantize(coords_aug, return_index=True, ignore_label=self.ignore_label)
@@ -149,9 +150,13 @@ class Voxelizer:
             transforms += [(M_v, M_r)]
 
         if num_pairs == 1:  # Simply return if simple input is required
-            if labels is not None:
-                labels = labels[unique_map]
-            return coords_aug[unique_map], feats[unique_map], labels, (M_v, M_r)
+            if use_unique_map:
+                if labels is not None:
+                    labels = labels[unique_map]
+                if feats is not None:
+                    feats = feats[unique_map]
+                coords_aug = coords_aug[unique_map]
+            return coords_aug, feats, labels, (M_v, M_r)
 
         else:  # Magic indexing for finding correspondences
             u_map0 = unique_maps[0]
