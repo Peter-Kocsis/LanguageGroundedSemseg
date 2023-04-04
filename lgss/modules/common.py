@@ -183,7 +183,7 @@ def conv(in_planes,
          dilation=1,
          bias=False,
          conv_type=ConvType.HYPERCUBE,
-         D=-1):
+         D=3):
   assert D > 0, 'Dimension must be a positive integer'
   up_stride = torch.IntTensor([1, ] * D)
   t_stride = torch.IntTensor([stride, ] * D)
