@@ -143,6 +143,11 @@ class Voxelizer:
             coords_aug = torch.floor(homo_coords @ torch.tensor(rigid_transformation.T[:, :3], dtype=coords.dtype, device=coords.device))
 
             # key = self.hash(coords_aug)  # floor happens by astype(np.uint64)
+            # TODO: Better quantization?
+            if feats is not None:
+                coords = ME.utils.batched_coordinates([coords_aug])
+                stensor = ME.SparseTensor(feats, coords, quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
+                return stensor.C[:, 1:], stensor.F, None, None
             _, unique_map = ME.utils.sparse_quantize(coords_aug, return_index=True, ignore_label=self.ignore_label)
 
             augmented_coords += [coords_aug]
